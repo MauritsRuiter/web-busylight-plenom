@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="BusylightSDK_WebHID.js"></script>
+    <title>Busylight Control</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        padding: 10px;
+        background-color: #fff;
+        color: #000;
+      }
+
+      button {
+        padding: 10px;
+        margin: 5px;
+        font-size: 14px;
+        cursor: pointer;
+        border: none;
+        border-radius: 5px;
+        transition: all 0.3s ease;
+      }
+
+      button:hover {
+        opacity: 0.8;
+      }
+
+      button:disabled {
+        background-color: #555;
+        cursor: not-allowed;
+      }
+
+      #deviceInfo {
+        margin-top: 20px;
+        font-size: 16px;
+        color: #ccc;
+      }
+
+      .button-container {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .button-container button {
+        margin: 10px;
+      }
+
+      /* Glowing button effects */
+      .glow-green {
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
+      }
+
+      .glow-red {
+        box-shadow: 0 0 20px rgba(255, 0, 0, 0.6);
+      }
+
+      .glow-blue {
+        box-shadow: 0 0 20px rgba(0, 0, 255, 0.6);
+      }
+
+      .glow-alert {
+        box-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
+      }
+
+      .glow-blink {
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
+        animation: blink 1s infinite;
+      }
+
+      .glow-pulse {
+        box-shadow: 0 0 20px rgba(255, 0, 0, 0.6);
+        animation: pulse 1s infinite;
+      }
+
+      .glow-purple {
+        box-shadow: 0 0 20px rgba(128, 0, 128, 0.6);
+      }
+
+      .glow-off {
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
+      }
+
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.2);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Busylight Control</h1>
+
+    <div class="button-container">
+      <button id="allow">Connect to Busylight</button>
+      <button id="red">Red</button>
+      <button id="green">Green</button>
+      <button id="blue">Blue</button>
+      <button id="alert">Alert</button>
+      <button id="blink">Blink</button>
+      <button id="pulse">Pulse</button>
+      <button id="purple">Purple</button>
+      <button id="off">Off</button>
+      <button id="start-rainbow">Start Rainbow</button>
+      <button id="stop-rainbow">Stop Rainbow</button>
+    </div>
+
+    <div id="deviceInfo">
+      <h3>Device Information:</h3>
+      <p id="status">Not connected to any Busylight device.</p>
+    </div>
+
+    <script>
+        (function () {
+          var ui = {
+            startRainbow: null,
+            stopRainbow: null,
+            off: null,
+            allow: null,
+            green: null,
+            red: null,
+            alert: null,
+            blink: null,
+            pulse: null,
+            blue: null,
+            purple: null,
+          };
+  
+          var busylightSDK = new BusylightSDK();
+  
+          var rainbowInterval;
+          var rainbowColors = [
+            { r: 255, g: 0, b: 0 },   // Red
+            { r: 255, g: 25, b: 0 },  // Orange
+            { r: 255, g: 255, b: 0 }, // Yellow
+            { r: 0, g: 255, b: 0 },   // Green
+            { r: 0, g: 0, b: 255 },   // Blue
+            { r: 55, g: 0, b: 190 },  // Indigo
+            { r: 198, g: 0, b: 140 }, // Violet
+          ];
+          var currentColorIndex = 0;
+          var nextColorIndex = 1;
+          var transitionStep = 0;
+          var transitionSteps = 100; // Number of steps for the transition (higher = smoother)
+  
+          var initializeWindow = function () {
+            for (var k in ui) {
+              var id = k.replace(/([A-Z])/, "-$1").toLowerCase();
+              var element = document.getElementById(id);
+              if (!element) {
+                throw "Missing UI element: " + k;
+              }
+              ui[k] = element;
+            }
+            enableIOControls(false);
+            ui.allow.addEventListener("click", onAllowClicked);
+            ui.green.addEventListener("click", onGreenClicked);
+            ui.red.addEventListener("click", onRedClicked);
+            ui.alert.addEventListener("click", onAlertClicked);
+            ui.blink.addEventListener("click", onBlinkClicked);
+            ui.pulse.addEventListener("click", onPulseClicked);
+            ui.blue.addEventListener("click", onBlueClicked);
+            ui.purple.addEventListener("click", onPurpleClicked);
+            ui.off.addEventListener("click", onOffClicked);
+            ui.startRainbow.addEventListener("click", onStartRainbowClicked);
+            ui.stopRainbow.addEventListener("click", onStopRainbowClicked);
+  
+            // Try to connect to previously approved devices at launch
+            let useDevicePicker = false; // Set to true to use the device picker
+            busylightSDK.start(useDevicePicker, onBusyLightConnected);
+          };
+  
+          var enableIOControls = function (ioEnabled) {
+            if (ioEnabled) {
+              ui.green.style.display = "";
+              ui.red.style.display = "";
+              ui.alert.style.display = "";
+              ui.blink.style.display = "";
+              ui.pulse.style.display = "";
+              ui.blue.style.display = "";
+              ui.purple.style.display = "";
+              ui.off.style.display = "";
+              ui.startRainbow.style.display = "";
+              ui.stopRainbow.style.display = "";
+              ui.allow.style.display = "none";
+              updateStatus("Busylight connected.");
+            } else {
+              ui.green.style.display = "none";
+              ui.red.style.display = "none";
+              ui.alert.style.display = "none";
+              ui.pulse.style.display = "none";
+              ui.blue.style.display = "none";
+              ui.purple.style.display = "none";
+              ui.off.style.display = "none";
+              ui.startRainbow.style.display = "none";
+              ui.stopRainbow.style.display = "none";
+              ui.allow.style.display = "";
+              updateStatus("Not connected to any Busylight device.");
+            }
+            ui.green.disabled = !ioEnabled;
+            ui.red.disabled = !ioEnabled;
+            ui.alert.disabled = !ioEnabled;
+            ui.blink.disabled = !ioEnabled;
+            ui.pulse.disabled = !ioEnabled;
+            ui.blue.disabled = !ioEnabled;
+            ui.purple.disabled = !ioEnabled;
+            ui.off.disabled = !ioEnabled;
+            ui.startRainbow.disabled = !ioEnabled;
+            ui.stopRainbow.disabled = !ioEnabled;
+          };
+  
+          var updateStatus = function (message) {
+            document.getElementById("status").textContent = message;
+          };
+  
+          var onAllowClicked = function () {
+            console.log("Starting connection...");
+            let useDevicePicker = true; // This will show the device picker
+            busylightSDK.start(useDevicePicker, onBusyLightConnected);
+          };
+  
+          function onBusyLightConnected() {
+            busylightSDK.ColorRGB(0, 100, 0); // Set initial color to green
+            enableIOControls(true);
+          }
+  
+          var onGreenClicked = function () {
+            busylightSDK.ColorRGB(0, 100, 0); // Green
+            updateButtonGlow("green");
+          };
+  
+          var onRedClicked = function () {
+            busylightSDK.ColorRGB(100, 0, 0); // Red
+            updateButtonGlow("red");
+          };
+  
+          var onAlertClicked = function () {
+            busylightSDK.Alert(
+              BusylightColor_Blue,
+              BusylightSoundclips.KuandoTrain,
+              BusylightVolume.High
+            );
+            updateButtonGlow("alert");
+          };
+  
+          var onBlinkClicked = function () {
+            busylightSDK.Blink(BusylightColor_Green, 3, 5);
+            updateButtonGlow("blink");
+          };
+  
+          var onPulseClicked = function () {
+            busylightSDK.Pulse(BusylightPulseSequence);
+            updateButtonGlow("pulse");
+          };
+  
+          var onBlueClicked = function () {
+            busylightSDK.ColorRGB(0, 0, 255); // Blue
+            updateButtonGlow("blue");
+          };
+  
+          var onPurpleClicked = function () {
+            busylightSDK.ColorRGB(128, 0, 128); // Purple
+            updateButtonGlow("purple");
+          };
+  
+          var onOffClicked = function () {
+            busylightSDK.ColorRGB(0, 0, 0); // Turn off the light
+            updateButtonGlow("off");
+          };
+  
+          var onStartRainbowClicked = function () {
+            startRainbowAnimation();
+          };
+  
+          var onStopRainbowClicked = function () {
+            stopRainbowAnimation();
+          };
+  
+          var startRainbowAnimation = function () {
+            // Clear any existing interval
+            stopRainbowAnimation();
+            transitionStep = 0;
+            rainbowInterval = setInterval(function () {
+              var color1 = rainbowColors[currentColorIndex];
+              var color2 = rainbowColors[nextColorIndex];
+  
+              // Interpolate between colors
+              var r = Math.floor(color1.r + (color2.r - color1.r) * (transitionStep / transitionSteps));
+              var g = Math.floor(color1.g + (color2.g - color1.g) * (transitionStep / transitionSteps));
+              var b = Math.floor(color1.b + (color2.b - color1.b) * (transitionStep / transitionSteps));
+  
+              busylightSDK.ColorRGB(r, g, b);
+  
+              transitionStep++;
+              if (transitionStep >= transitionSteps) {
+                transitionStep = 0;
+                currentColorIndex = nextColorIndex;
+                nextColorIndex = (nextColorIndex + 1) % rainbowColors.length;
+              }
+            }, 10);
+          };
+  
+          var stopRainbowAnimation = function () {
+            if (rainbowInterval) {
+              clearInterval(rainbowInterval);
+              rainbowInterval = null;
+            }
+          };
+  
+          function updateButtonGlow(effect) {
+            // Remove all glow classes
+            const buttons = document.querySelectorAll(".button-container button");
+            buttons.forEach(button => {
+              button.classList.remove("glow-green", "glow-red", "glow-blue", "glow-alert", "glow-blink", "glow-pulse", "glow-purple", "glow-off");
+            });
+            
+            // Add the corresponding glow class to the clicked button
+            const button = document.getElementById(effect);
+            if (button) {
+              button.classList.add(`glow-${effect}`);
+            }
+          }
+  
+          window.addEventListener("load", initializeWindow);
+        })();
+      </script>
+  </body>
+</html>
